@@ -1,0 +1,43 @@
+{
+    "name": "emilienkopp/laravel-depth",
+    "description": "A static analysis tool to evaluate dependency trees and the blast radius of a refactor.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "static-analysis",
+        "dependency",
+        "artisan",
+        "refactor"
+    ],
+    "require": {
+        "php": "^8.1",
+        "illuminate/console": "^10.0|^11.0",
+        "illuminate/routing": "^10.0|^11.0",
+        "illuminate/support": "^10.0|^11.0",
+        "nikic/php-parser": "^5.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^8.0|^9.0",
+        "phpunit/phpunit": "^10.0|^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "EmilienKopp\\LaravelDepth\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "EmilienKopp\\LaravelDepth\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "EmilienKopp\\LaravelDepth\\DepthServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
