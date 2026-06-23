@@ -1,164 +1,140 @@
 <?php
 
-namespace EmilienKopp\LaravelDepth\Tests\Unit;
+declare(strict_types=1);
 
 use EmilienKopp\LaravelDepth\Output\JsonFormatter;
 use EmilienKopp\LaravelDepth\Output\TreeFormatter;
-use PHPUnit\Framework\TestCase;
 
-class OutputFormatterTest extends TestCase
-{
-    private array $result;
-    private array $routeMap;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->result = [
-            'trees' => [
-                'App\\Services\\FooQueryService' => [
-                    'callers' => [
-                        'App\\UseCases\\FooUseCase' => [
-                            'callers' => [
-                                'App\\Http\\Controllers\\FooController' => ['entry' => true],
-                            ],
+beforeEach(function (): void {
+    $this->result = [
+        'trees' => [
+            'App\\Services\\FooQueryService' => [
+                'callers' => [
+                    'App\\UseCases\\FooUseCase' => [
+                        'callers' => [
+                            'App\\Http\\Controllers\\FooController' => ['entry' => true],
                         ],
                     ],
                 ],
             ],
-            'orphans' => ['App\\Services\\OrphanQueryService'],
-        ];
+        ],
+        'orphans' => ['App\\Services\\OrphanQueryService'],
+    ];
 
-        $this->routeMap = [
-            'App\\Http\\Controllers\\FooController' => [
-                'method' => 'GET',
-                'route' => 'api/foo',
-                'middlewares' => ['api', 'auth'],
-            ],
-        ];
-    }
+    $this->routeMap = [
+        'App\\Http\\Controllers\\FooController' => [
+            'method' => 'GET',
+            'route' => 'api/foo',
+            'middlewares' => ['api', 'auth'],
+        ],
+    ];
+});
 
-    // --- TreeFormatter ---
+test('tree formatter renders root', function (): void {
+    $formatter = new TreeFormatter();
+    $output = $formatter->format($this->result, $this->routeMap);
 
-    public function test_tree_formatter_renders_root(): void
-    {
-        $formatter = new TreeFormatter();
-        $output = $formatter->format($this->result, $this->routeMap);
+    expect($output)->toContain('App\\Services\\FooQueryService');
+});
 
-        $this->assertStringContainsString('App\\Services\\FooQueryService', $output);
-    }
+test('tree formatter renders callers with tree chars', function (): void {
+    $formatter = new TreeFormatter();
+    $output = $formatter->format($this->result, $this->routeMap);
 
-    public function test_tree_formatter_renders_callers_with_tree_chars(): void
-    {
-        $formatter = new TreeFormatter();
-        $output = $formatter->format($this->result, $this->routeMap);
+    expect($output)->toContain('└──');
+    expect($output)->toContain('App\\UseCases\\FooUseCase');
+});
 
-        $this->assertStringContainsString('└──', $output);
-        $this->assertStringContainsString('App\\UseCases\\FooUseCase', $output);
-    }
+test('tree formatter annotates entry with route', function (): void {
+    $formatter = new TreeFormatter();
+    $output = $formatter->format($this->result, $this->routeMap);
 
-    public function test_tree_formatter_annotates_entry_with_route(): void
-    {
-        $formatter = new TreeFormatter();
-        $output = $formatter->format($this->result, $this->routeMap);
+    expect($output)->toContain('[ENTRY: GET api/foo');
+    expect($output)->toContain('api, auth');
+});
 
-        $this->assertStringContainsString('[ENTRY: GET api/foo', $output);
-        $this->assertStringContainsString('api, auth', $output);
-    }
+test('tree formatter annotates entry without route', function (): void {
+    $formatter = new TreeFormatter();
+    $output = $formatter->format($this->result, []);
 
-    public function test_tree_formatter_annotates_entry_without_route(): void
-    {
-        $formatter = new TreeFormatter();
-        $output = $formatter->format($this->result, []); // no route map
+    expect($output)->toContain('[ENTRY]');
+});
 
-        $this->assertStringContainsString('[ENTRY]', $output);
-    }
+test('tree formatter renders orphan warning', function (): void {
+    $formatter = new TreeFormatter();
+    $output = $formatter->format($this->result, []);
 
-    public function test_tree_formatter_renders_orphan_warning(): void
-    {
-        $formatter = new TreeFormatter();
-        $output = $formatter->format($this->result, []);
+    expect($output)->toContain('ORPHAN');
+    expect($output)->toContain('App\\Services\\OrphanQueryService');
+});
 
-        $this->assertStringContainsString('ORPHAN', $output);
-        $this->assertStringContainsString('App\\Services\\OrphanQueryService', $output);
-    }
-
-    public function test_tree_formatter_marks_cycles(): void
-    {
-        $result = [
-            'trees' => [
-                'App\\Services\\FooQueryService' => [
-                    'callers' => [
-                        'App\\Services\\FooQueryService' => ['cycle' => true],
-                    ],
+test('tree formatter marks cycles', function (): void {
+    $result = [
+        'trees' => [
+            'App\\Services\\FooQueryService' => [
+                'callers' => [
+                    'App\\Services\\FooQueryService' => ['cycle' => true],
                 ],
             ],
-            'orphans' => [],
-        ];
+        ],
+        'orphans' => [],
+    ];
 
-        $formatter = new TreeFormatter();
-        $output = $formatter->format($result, []);
+    $formatter = new TreeFormatter();
+    $output = $formatter->format($result, []);
 
-        $this->assertStringContainsString('[CYCLE]', $output);
-    }
+    expect($output)->toContain('[CYCLE]');
+});
 
-    // --- JsonFormatter ---
+test('json formatter produces valid json', function (): void {
+    $formatter = new JsonFormatter();
+    $output = $formatter->format($this->result, $this->routeMap);
 
-    public function test_json_formatter_produces_valid_json(): void
-    {
-        $formatter = new JsonFormatter();
-        $output = $formatter->format($this->result, $this->routeMap);
+    $decoded = json_decode($output, true);
+    expect($decoded)->toBeArray();
+    expect(json_last_error())->toBe(JSON_ERROR_NONE);
+});
 
-        $decoded = json_decode($output, true);
-        $this->assertIsArray($decoded);
-        $this->assertSame(JSON_ERROR_NONE, json_last_error());
-    }
+test('json formatter includes entry info', function (): void {
+    $formatter = new JsonFormatter();
+    $output = $formatter->format($this->result, $this->routeMap);
+    $decoded = json_decode($output, true);
 
-    public function test_json_formatter_includes_entry_info(): void
-    {
-        $formatter = new JsonFormatter();
-        $output = $formatter->format($this->result, $this->routeMap);
-        $decoded = json_decode($output, true);
+    $root = $decoded['App\\Services\\FooQueryService'];
+    $useCase = $root['callers']['App\\UseCases\\FooUseCase'];
+    $controller = $useCase['callers']['App\\Http\\Controllers\\FooController'];
 
-        $root = $decoded['App\\Services\\FooQueryService'];
-        $useCase = $root['callers']['App\\UseCases\\FooUseCase'];
-        $controller = $useCase['callers']['App\\Http\\Controllers\\FooController'];
+    expect($controller['entry'])->toBeTrue();
+    expect($controller['method'])->toBe('GET');
+    expect($controller['route'])->toBe('api/foo');
+    expect($controller['middlewares'])->toBe(['api', 'auth']);
+});
 
-        $this->assertTrue($controller['entry']);
-        $this->assertSame('GET', $controller['method']);
-        $this->assertSame('api/foo', $controller['route']);
-        $this->assertSame(['api', 'auth'], $controller['middlewares']);
-    }
+test('json formatter includes orphan flag', function (): void {
+    $formatter = new JsonFormatter();
+    $output = $formatter->format($this->result, []);
+    $decoded = json_decode($output, true);
 
-    public function test_json_formatter_includes_orphan_flag(): void
-    {
-        $formatter = new JsonFormatter();
-        $output = $formatter->format($this->result, []);
-        $decoded = json_decode($output, true);
+    expect($decoded)->toHaveKey('App\\Services\\OrphanQueryService');
+    expect($decoded['App\\Services\\OrphanQueryService']['orphan'])->toBeTrue();
+});
 
-        $this->assertArrayHasKey('App\\Services\\OrphanQueryService', $decoded);
-        $this->assertTrue($decoded['App\\Services\\OrphanQueryService']['orphan']);
-    }
-
-    public function test_json_formatter_marks_cycles(): void
-    {
-        $result = [
-            'trees' => [
-                'App\\Services\\FooQueryService' => [
-                    'callers' => [
-                        'App\\Services\\BarService' => ['cycle' => true],
-                    ],
+test('json formatter marks cycles', function (): void {
+    $result = [
+        'trees' => [
+            'App\\Services\\FooQueryService' => [
+                'callers' => [
+                    'App\\Services\\BarService' => ['cycle' => true],
                 ],
             ],
-            'orphans' => [],
-        ];
+        ],
+        'orphans' => [],
+    ];
 
-        $formatter = new JsonFormatter();
-        $output = $formatter->format($result, []);
-        $decoded = json_decode($output, true);
+    $formatter = new JsonFormatter();
+    $output = $formatter->format($result, []);
+    $decoded = json_decode($output, true);
 
-        $root = $decoded['App\\Services\\FooQueryService'];
-        $this->assertTrue($root['callers']['App\\Services\\BarService']['cycle']);
-    }
-}
+    $root = $decoded['App\\Services\\FooQueryService'];
+    expect($root['callers']['App\\Services\\BarService']['cycle'])->toBeTrue();
+});

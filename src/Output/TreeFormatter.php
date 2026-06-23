@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EmilienKopp\LaravelDepth\Output;
 
 /**
@@ -13,7 +15,7 @@ namespace EmilienKopp\LaravelDepth\Output;
  *
  *   ⚠  ORPHAN (nothing calls this): Modules\Foo\Infrastructure\QueryService\OrphanQueryService
  */
-class TreeFormatter
+final class TreeFormatter
 {
     /**
      * Format the trace result as a human-readable tree string.
@@ -26,13 +28,13 @@ class TreeFormatter
         $output = '';
 
         foreach ($result['trees'] as $root => $tree) {
-            $output .= $root . "\n";
+            $output .= $root."\n";
             $output .= $this->formatNode($tree, '    ', $routeMap);
             $output .= "\n";
         }
 
         foreach ($result['orphans'] as $orphan) {
-            $output .= "⚠  ORPHAN (nothing calls this): {$orphan}\n";
+            $output .= sprintf('⚠  ORPHAN (nothing calls this): %s%s', $orphan, PHP_EOL);
         }
 
         return $output;
@@ -45,16 +47,17 @@ class TreeFormatter
         foreach ($node['callers'] ?? [] as $caller => $callerNode) {
             if (isset($callerNode['cycle']) && $callerNode['cycle']) {
                 $output .= "{$indent}└── {$caller} [CYCLE]\n";
+
                 continue;
             }
 
             if (isset($callerNode['entry']) && $callerNode['entry']) {
                 $entryInfo = $this->buildEntryAnnotation($caller, $routeMap);
-                $output .= "{$indent}└── {$caller}{$entryInfo}\n";
+                $output .= sprintf('%s└── %s%s%s', $indent, $caller, $entryInfo, PHP_EOL);
             } else {
-                $output .= "{$indent}└── {$caller}\n";
+                $output .= sprintf('%s└── %s%s', $indent, $caller, PHP_EOL);
                 if (! empty($callerNode['callers'])) {
-                    $output .= $this->formatNode($callerNode, $indent . '    ', $routeMap);
+                    $output .= $this->formatNode($callerNode, $indent.'    ', $routeMap);
                 }
             }
         }
@@ -70,8 +73,8 @@ class TreeFormatter
 
         $route = $routeMap[$caller];
         $middlewares = implode(', ', $route['middlewares']);
-        $arrow = $middlewares !== '' ? " → {$middlewares}" : '';
+        $arrow = $middlewares !== '' ? ' → '.$middlewares : '';
 
-        return " [ENTRY: {$route['method']} {$route['route']}{$arrow}]";
+        return sprintf(' [ENTRY: %s %s%s]', $route['method'], $route['route'], $arrow);
     }
 }

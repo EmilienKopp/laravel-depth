@@ -1,31 +1,42 @@
 <?php
 
-namespace EmilienKopp\LaravelDepth\Tests\Unit;
+declare(strict_types=1);
 
 use EmilienKopp\LaravelDepth\Core\DependencyIndexBuilder;
-use PHPUnit\Framework\TestCase;
 
-class DependencyIndexBuilderTest extends TestCase
-{
-    private string $fixtureDir;
+beforeEach(function (): void {
+    $this->fixtureDir = sys_get_temp_dir().'/laravel-depth-dep-test-'.uniqid();
+    mkdir($this->fixtureDir, 0777, true);
+});
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->fixtureDir = sys_get_temp_dir() . '/laravel-depth-dep-test-' . uniqid();
-        mkdir($this->fixtureDir, 0777, true);
-    }
+afterEach(function (): void {
+    $rmdirRecursive = function (string $dir) use (&$rmdirRecursive): void {
+        if (! is_dir($dir)) {
+            return;
+        }
 
-    protected function tearDown(): void
-    {
-        parent::tearDown();
-        $this->rmdirRecursive($this->fixtureDir);
-    }
+        foreach (scandir($dir) as $item) {
+            if ($item === '.') {
+                continue;
+            }
 
-    public function test_builds_reverse_index_from_constructor_injection(): void
-    {
-        $serviceFile = $this->fixtureDir . '/FooService.php';
-        file_put_contents($serviceFile, '<?php
+            if ($item === '..') {
+                continue;
+            }
+
+            $path = $dir.'/'.$item;
+            is_dir($path) ? $rmdirRecursive($path) : unlink($path);
+        }
+
+        rmdir($dir);
+    };
+
+    $rmdirRecursive($this->fixtureDir);
+});
+
+test('builds reverse index from constructor injection', function (): void {
+    $serviceFile = $this->fixtureDir.'/FooService.php';
+    file_put_contents($serviceFile, '<?php
 namespace App\Services;
 use App\Repositories\FooRepository;
 class FooService {
@@ -33,28 +44,27 @@ class FooService {
 }
 ');
 
-        $repoFile = $this->fixtureDir . '/FooRepository.php';
-        file_put_contents($repoFile, '<?php
+    $repoFile = $this->fixtureDir.'/FooRepository.php';
+    file_put_contents($repoFile, '<?php
 namespace App\Repositories;
 class FooRepository {}
 ');
 
-        $classMap = [
-            'App\\Services\\FooService' => $serviceFile,
-            'App\\Repositories\\FooRepository' => $repoFile,
-        ];
+    $classMap = [
+        'App\\Services\\FooService' => $serviceFile,
+        'App\\Repositories\\FooRepository' => $repoFile,
+    ];
 
-        $builder = new DependencyIndexBuilder();
-        $index = $builder->build($classMap);
+    $builder = new DependencyIndexBuilder();
+    $index = $builder->build($classMap);
 
-        $this->assertArrayHasKey('App\\Repositories\\FooRepository', $index);
-        $this->assertContains('App\\Services\\FooService', $index['App\\Repositories\\FooRepository']);
-    }
+    expect($index)->toHaveKey('App\\Repositories\\FooRepository');
+    expect($index['App\\Repositories\\FooRepository'])->toContain('App\\Services\\FooService');
+});
 
-    public function test_handles_nullable_typehints(): void
-    {
-        $serviceFile = $this->fixtureDir . '/FooService.php';
-        file_put_contents($serviceFile, '<?php
+test('handles nullable type hints', function (): void {
+    $serviceFile = $this->fixtureDir.'/FooService.php';
+    file_put_contents($serviceFile, '<?php
 namespace App\Services;
 use App\Repositories\FooRepository;
 class FooService {
@@ -62,64 +72,60 @@ class FooService {
 }
 ');
 
-        $repoFile = $this->fixtureDir . '/FooRepository.php';
-        file_put_contents($repoFile, '<?php namespace App\Repositories; class FooRepository {}');
+    $repoFile = $this->fixtureDir.'/FooRepository.php';
+    file_put_contents($repoFile, '<?php namespace App\Repositories; class FooRepository {}');
 
-        $classMap = [
-            'App\\Services\\FooService' => $serviceFile,
-            'App\\Repositories\\FooRepository' => $repoFile,
-        ];
+    $classMap = [
+        'App\\Services\\FooService' => $serviceFile,
+        'App\\Repositories\\FooRepository' => $repoFile,
+    ];
 
-        $builder = new DependencyIndexBuilder();
-        $index = $builder->build($classMap);
+    $builder = new DependencyIndexBuilder();
+    $index = $builder->build($classMap);
 
-        $this->assertArrayHasKey('App\\Repositories\\FooRepository', $index);
-        $this->assertContains('App\\Services\\FooService', $index['App\\Repositories\\FooRepository']);
-    }
+    expect($index)->toHaveKey('App\\Repositories\\FooRepository');
+    expect($index['App\\Repositories\\FooRepository'])->toContain('App\\Services\\FooService');
+});
 
-    public function test_resolves_fully_qualified_typehints(): void
-    {
-        $serviceFile = $this->fixtureDir . '/BazService.php';
-        file_put_contents($serviceFile, '<?php
+test('resolves fully qualified type hints', function (): void {
+    $serviceFile = $this->fixtureDir.'/BazService.php';
+    file_put_contents($serviceFile, '<?php
 namespace App\Services;
 class BazService {
     public function __construct(private \App\Repositories\BazRepository $repo) {}
 }
 ');
 
-        $classMap = ['App\\Services\\BazService' => $serviceFile];
+    $classMap = ['App\\Services\\BazService' => $serviceFile];
 
-        $builder = new DependencyIndexBuilder();
-        $index = $builder->build($classMap);
+    $builder = new DependencyIndexBuilder();
+    $index = $builder->build($classMap);
 
-        $this->assertArrayHasKey('App\\Repositories\\BazRepository', $index);
-        $this->assertContains('App\\Services\\BazService', $index['App\\Repositories\\BazRepository']);
-    }
+    expect($index)->toHaveKey('App\\Repositories\\BazRepository');
+    expect($index['App\\Repositories\\BazRepository'])->toContain('App\\Services\\BazService');
+});
 
-    public function test_ignores_scalar_typehints(): void
-    {
-        $serviceFile = $this->fixtureDir . '/ScalarService.php';
-        file_put_contents($serviceFile, '<?php
+test('ignores scalar type hints', function (): void {
+    $serviceFile = $this->fixtureDir.'/ScalarService.php';
+    file_put_contents($serviceFile, '<?php
 namespace App\Services;
 class ScalarService {
     public function __construct(private string $name, private int $count) {}
 }
 ');
 
-        $classMap = ['App\\Services\\ScalarService' => $serviceFile];
+    $classMap = ['App\\Services\\ScalarService' => $serviceFile];
 
-        $builder = new DependencyIndexBuilder();
-        $index = $builder->build($classMap);
+    $builder = new DependencyIndexBuilder();
+    $index = $builder->build($classMap);
 
-        $this->assertArrayNotHasKey('string', $index);
-        $this->assertArrayNotHasKey('int', $index);
-    }
+    expect($index)->not->toHaveKey('string');
+    expect($index)->not->toHaveKey('int');
+});
 
-    public function test_deduplicates_callers(): void
-    {
-        // Same file defining two classes that both inject FooRepository would only appear once
-        $serviceFile = $this->fixtureDir . '/Services.php';
-        file_put_contents($serviceFile, '<?php
+test('deduplicates callers', function (): void {
+    $serviceFile = $this->fixtureDir.'/Services.php';
+    file_put_contents($serviceFile, '<?php
 namespace App\Services;
 use App\Repositories\FooRepository;
 class ServiceA {
@@ -130,46 +136,28 @@ class ServiceB {
 }
 ');
 
-        $classMap = [
-            'App\\Services\\ServiceA' => $serviceFile,
-            'App\\Services\\ServiceB' => $serviceFile,
-        ];
+    $classMap = [
+        'App\\Services\\ServiceA' => $serviceFile,
+        'App\\Services\\ServiceB' => $serviceFile,
+    ];
 
-        $builder = new DependencyIndexBuilder();
-        $index = $builder->build($classMap);
+    $builder = new DependencyIndexBuilder();
+    $index = $builder->build($classMap);
 
-        $this->assertArrayHasKey('App\\Repositories\\FooRepository', $index);
-        $callers = $index['App\\Repositories\\FooRepository'];
-        $this->assertContains('App\\Services\\ServiceA', $callers);
-        $this->assertContains('App\\Services\\ServiceB', $callers);
-    }
+    expect($index)->toHaveKey('App\\Repositories\\FooRepository');
+    expect($index['App\\Repositories\\FooRepository'])->toContain('App\\Services\\ServiceA');
+    expect($index['App\\Repositories\\FooRepository'])->toContain('App\\Services\\ServiceB');
+});
 
-    public function test_progress_callback_receives_file_paths(): void
-    {
-        $serviceFile = $this->fixtureDir . '/FooService.php';
-        file_put_contents($serviceFile, '<?php namespace App; class Foo {}');
+test('progress callback receives file paths', function (): void {
+    $serviceFile = $this->fixtureDir.'/FooService.php';
+    file_put_contents($serviceFile, '<?php namespace App; class Foo {}');
 
-        $visited = [];
-        $builder = new DependencyIndexBuilder();
-        $builder->build(['App\\Foo' => $serviceFile], function (string $path) use (&$visited) {
-            $visited[] = $path;
-        });
+    $visited = [];
+    $builder = new DependencyIndexBuilder();
+    $builder->build(['App\\Foo' => $serviceFile], function (string $path) use (&$visited): void {
+        $visited[] = $path;
+    });
 
-        $this->assertContains($serviceFile, $visited);
-    }
-
-    private function rmdirRecursive(string $dir): void
-    {
-        if (! is_dir($dir)) {
-            return;
-        }
-        foreach (scandir($dir) as $item) {
-            if ($item === '.' || $item === '..') {
-                continue;
-            }
-            $path = $dir . '/' . $item;
-            is_dir($path) ? $this->rmdirRecursive($path) : unlink($path);
-        }
-        rmdir($dir);
-    }
-}
+    expect($visited)->toContain($serviceFile);
+});

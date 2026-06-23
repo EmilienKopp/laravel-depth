@@ -1,4 +1,5 @@
 /vendor/
+/.dev/
 composer.lock
 node_modules/
 npm-debug.log

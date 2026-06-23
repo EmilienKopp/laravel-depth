@@ -4,32 +4,32 @@ declare(strict_types=1);
 
 namespace EmilienKopp\LaravelDepth\Core;
 
-use EmilienKopp\LaravelDepth\Core\Visitors\DependencyVisitor;
+use EmilienKopp\LaravelDepth\Core\Visitors\UsageVisitor;
 use PhpParser\NodeTraverser;
 use PhpParser\ParserFactory;
 use Throwable;
 
 /**
- * Builds a reverse dependency index by parsing constructor injection typehints.
+ * Builds a per-class symbol usage index from AST analysis.
  *
- * The index maps: injected FQCN => list of FQCNs that inject it.
- * Each file is parsed only once even if multiple classes reside in it.
+ * Usage currently includes:
+ * - used traits
+ * - extends/implements
+ * - typed properties
+ * - class method parameter types
  */
-final class DependencyIndexBuilder
+final class UsageIndexBuilder
 {
     /**
-     * Build the reverse dependency index.
-     *
      * @param  array<string, string>  $classMap  FQCN => file path
-     * @param  callable|null  $progress  Invoked with the file path being processed
-     * @return array<string, list<string>> injectedFQCN => [callerFQCN, ...]
+     * @param  callable|null  $progress  Invoked with each file path being processed
+     * @return array<string, array<string, true>> class FQCN => set of used symbol FQCNs
      */
     public function build(array $classMap, ?callable $progress = null): array
     {
-        $reverseIndex = [];
+        $usageIndex = [];
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
 
-        // Deduplicate: parse each unique file only once
         $uniqueFiles = array_unique(array_values($classMap));
 
         foreach ($uniqueFiles as $filePath) {
@@ -48,14 +48,15 @@ final class DependencyIndexBuilder
                     continue;
                 }
 
-                $visitor = new DependencyVisitor();
+                $visitor = new UsageVisitor();
                 $traverser = new NodeTraverser();
                 $traverser->addVisitor($visitor);
                 $traverser->traverse($ast);
 
-                foreach ($visitor->getDependencies() as $callerFqcn => $injectedFqcns) {
-                    foreach ($injectedFqcns as $injectedFqcn) {
-                        $reverseIndex[$injectedFqcn][] = $callerFqcn;
+                foreach ($visitor->getUsageIndex() as $fqcn => $symbols) {
+                    $usageIndex[$fqcn] ??= [];
+                    foreach ($symbols as $symbol => $_) {
+                        $usageIndex[$fqcn][$symbol] = true;
                     }
                 }
             } catch (Throwable) {
@@ -63,13 +64,6 @@ final class DependencyIndexBuilder
             }
         }
 
-        // Deduplicate callers per injected class
-        foreach ($reverseIndex as &$callers) {
-            $callers = array_values(array_unique($callers));
-        }
-
-        unset($callers);
-
-        return $reverseIndex;
+        return $usageIndex;
     }
 }

@@ -1,6 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EmilienKopp\LaravelDepth\Core;
+
+use Closure;
 
 /**
  * Traces the caller graph for all classes matching a given suffix.
@@ -13,14 +17,19 @@ namespace EmilienKopp\LaravelDepth\Core;
  * Classes whose name ends with an entry-point suffix stop recursion and are
  * marked as entry points.
  */
-class DependencyTracer
+final class DependencyTracer
 {
     /** @var list<string> */
     private readonly array $entryPointSuffixes;
+
     /** @var array<string, true> */
     private readonly array $interfaces;
+
     /** @var array<string, true> */
     private readonly array $abstracts;
+
+    /** @var Closure(string): bool|null */
+    private readonly ?Closure $rootFilter;
 
     /**
      * @param  array<string, string>  $classMap  FQCN => file path
@@ -28,7 +37,8 @@ class DependencyTracer
      * @param  array{
      *   entry_point_suffixes?: list<string>,
      *   interfaces?: array<string, true>,
-     *   abstracts?: array<string, true>
+     *   abstracts?: array<string, true>,
+     *   root_filter?: callable(string): bool
      * }  $options
      */
     public function __construct(
@@ -40,6 +50,8 @@ class DependencyTracer
             ?? ['Controller', 'Job', 'Command', 'Listener', 'Webhook'];
         $this->interfaces = $options['interfaces'] ?? [];
         $this->abstracts = $options['abstracts'] ?? [];
+        $rootFilter = $options['root_filter'] ?? null;
+        $this->rootFilter = is_callable($rootFilter) ? Closure::fromCallable($rootFilter) : null;
     }
 
     /**
@@ -65,7 +77,13 @@ class DependencyTracer
             }
         }
 
-        return compact('trees', 'orphans');
+        return ['trees' => $trees, 'orphans' => $orphans];
+    }
+
+    /** @return list<string> */
+    public function getEntryPointSuffixes(): array
+    {
+        return $this->entryPointSuffixes;
     }
 
     /**
@@ -80,11 +98,22 @@ class DependencyTracer
             if (! str_ends_with($fqcn, $suffix)) {
                 continue;
             }
-            if (isset($this->interfaces[$fqcn]) || isset($this->abstracts[$fqcn])) {
+
+            if (isset($this->interfaces[$fqcn])) {
                 continue;
             }
+
+            if (isset($this->abstracts[$fqcn])) {
+                continue;
+            }
+
+            if ($this->rootFilter instanceof Closure && ! ($this->rootFilter)($fqcn)) {
+                continue;
+            }
+
             $roots[] = $fqcn;
         }
+
         sort($roots);
 
         return $roots;
@@ -104,6 +133,7 @@ class DependencyTracer
         foreach ($callers as $caller) {
             if (in_array($caller, $visited, true)) {
                 $node['callers'][$caller] = ['cycle' => true];
+
                 continue;
             }
 
@@ -127,11 +157,5 @@ class DependencyTracer
         }
 
         return false;
-    }
-
-    /** @return list<string> */
-    public function getEntryPointSuffixes(): array
-    {
-        return $this->entryPointSuffixes;
     }
 }

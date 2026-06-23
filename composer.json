@@ -1,43 +1,71 @@
 {
-    "name": "emilienkopp/laravel-depth",
-    "description": "A static analysis tool to evaluate dependency trees and the blast radius of a refactor.",
-    "type": "library",
-    "license": "MIT",
-    "keywords": [
-        "laravel",
-        "static-analysis",
-        "dependency",
-        "artisan",
-        "refactor"
+  "name": "emilienkopp/laravel-depth",
+  "description": "A static analysis tool to evaluate dependency trees and the blast radius of a refactor.",
+  "type": "library",
+  "license": "MIT",
+  "keywords": [
+    "laravel",
+    "static-analysis",
+    "dependency",
+    "artisan",
+    "refactor"
+  ],
+  "require": {
+    "php": "^8.1",
+    "illuminate/console": "^10.0|^11.0|^12.0",
+    "illuminate/routing": "^10.0|^11.0|^12.0",
+    "illuminate/support": "^10.0|^11.0|^12.0",
+    "nikic/php-parser": "^5.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.0|^11.0",
+    "pestphp/pest": "^3.0",
+    "laravel/pint": "^1.29",
+    "rector/rector": "^2.5",
+    "phpstan/phpstan": "^2.2",
+    "pestphp/pest-plugin-type-coverage": "^3.6"
+  },
+  "scripts": {
+    "refactor": "rector",
+    "lint": "pint --parallel",
+    "test:refactor": "rector --dry-run",
+    "test:lint": "pint --parallel --test",
+    "test:types": "phpstan analyse --ansi",
+    "test:unit": "pest --colors=always",
+    "test": [
+      "@test:lint",
+      "@test:types",
+      "@test:unit"
     ],
-    "require": {
-        "php": "^8.1",
-        "illuminate/console": "^10.0|^11.0",
-        "illuminate/routing": "^10.0|^11.0",
-        "illuminate/support": "^10.0|^11.0",
-        "nikic/php-parser": "^5.0"
-    },
-    "require-dev": {
-        "orchestra/testbench": "^8.0|^9.0",
-        "phpunit/phpunit": "^10.0|^11.0"
-    },
-    "autoload": {
-        "psr-4": {
-            "EmilienKopp\\LaravelDepth\\": "src/"
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "EmilienKopp\\LaravelDepth\\Tests\\": "tests/"
-        }
-    },
-    "extra": {
-        "laravel": {
-            "providers": [
-                "EmilienKopp\\LaravelDepth\\DepthServiceProvider"
-            ]
-        }
-    },
-    "minimum-stability": "stable",
-    "prefer-stable": true
+    "test:ci": [
+      "@test:refactor",
+      "@test:lint",
+      "@test:types",
+      "@test:unit"
+    ]
+  },
+  "autoload": {
+    "psr-4": {
+      "EmilienKopp\\LaravelDepth\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "EmilienKopp\\LaravelDepth\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "EmilienKopp\\LaravelDepth\\DepthServiceProvider"
+      ]
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "config": {
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
+  }
 }

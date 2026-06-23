@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EmilienKopp\LaravelDepth\Output;
 
 /**
@@ -30,7 +32,7 @@ namespace EmilienKopp\LaravelDepth\Output;
  *   }
  * }
  */
-class JsonFormatter
+final class JsonFormatter
 {
     /**
      * Format the trace result as a JSON string.
@@ -53,7 +55,7 @@ class JsonFormatter
         return json_encode(
             $output,
             JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-        ) . "\n";
+        )."\n";
     }
 
     private function formatNode(array $node, array $routeMap): array
@@ -63,6 +65,7 @@ class JsonFormatter
         foreach ($node['callers'] ?? [] as $caller => $callerNode) {
             if (isset($callerNode['cycle']) && $callerNode['cycle']) {
                 $callers[$caller] = ['cycle' => true];
+
                 continue;
             }
 
@@ -74,6 +77,7 @@ class JsonFormatter
                     $entryData['route'] = $route['route'];
                     $entryData['middlewares'] = $route['middlewares'];
                 }
+
                 $callers[$caller] = $entryData;
             } else {
                 $callers[$caller] = $this->formatNode($callerNode, $routeMap);

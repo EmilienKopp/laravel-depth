@@ -1,157 +1,159 @@
 <?php
 
-namespace EmilienKopp\LaravelDepth\Tests\Unit;
+declare(strict_types=1);
 
 use EmilienKopp\LaravelDepth\Core\DependencyTracer;
-use PHPUnit\Framework\TestCase;
 
-class DependencyTracerTest extends TestCase
-{
-    private array $classMap;
+beforeEach(function (): void {
+    $this->classMap = [
+        'App\\Services\\FooQueryService' => '/path/FooQueryService.php',
+        'App\\Services\\BarQueryService' => '/path/BarQueryService.php',
+        'App\\Services\\SomeOtherService' => '/path/SomeOtherService.php',
+        'App\\UseCases\\FooUseCase' => '/path/FooUseCase.php',
+        'App\\Http\\Controllers\\FooController' => '/path/FooController.php',
+        'App\\Contracts\\IFooQueryService' => '/path/IFooQueryService.php',
+    ];
+});
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->classMap = [
-            'App\\Services\\FooQueryService' => '/path/FooQueryService.php',
-            'App\\Services\\BarQueryService' => '/path/BarQueryService.php',
-            'App\\Services\\SomeOtherService' => '/path/SomeOtherService.php',
-            'App\\UseCases\\FooUseCase' => '/path/FooUseCase.php',
-            'App\\Http\\Controllers\\FooController' => '/path/FooController.php',
-            'App\\Contracts\\IFooQueryService' => '/path/IFooQueryService.php',
-        ];
-    }
+test('finds roots by suffix and traces callers', function (): void {
+    $reverseIndex = [
+        'App\\Services\\FooQueryService' => ['App\\UseCases\\FooUseCase'],
+        'App\\UseCases\\FooUseCase' => ['App\\Http\\Controllers\\FooController'],
+    ];
 
-    public function test_finds_roots_by_suffix_and_traces_callers(): void
-    {
-        $reverseIndex = [
-            'App\\Services\\FooQueryService' => ['App\\UseCases\\FooUseCase'],
-            'App\\UseCases\\FooUseCase' => ['App\\Http\\Controllers\\FooController'],
-        ];
+    $tracer = new DependencyTracer($this->classMap, $reverseIndex, [
+        'entry_point_suffixes' => ['Controller'],
+    ]);
 
-        $tracer = new DependencyTracer($this->classMap, $reverseIndex, [
-            'entry_point_suffixes' => ['Controller'],
-        ]);
+    $result = $tracer->trace('QueryService');
 
-        $result = $tracer->trace('QueryService');
+    expect($result['trees'])->toHaveKey('App\\Services\\FooQueryService');
+    expect($result['orphans'])->toContain('App\\Services\\BarQueryService');
+    expect($result['trees'])->not->toHaveKey('App\\Services\\SomeOtherService');
+    expect($result['orphans'])->not->toContain('App\\Services\\SomeOtherService');
+});
 
-        // FooQueryService has callers → appears in trees
-        $this->assertArrayHasKey('App\\Services\\FooQueryService', $result['trees']);
+test('marks orphans when no callers', function (): void {
+    $tracer = new DependencyTracer(
+        ['App\\Services\\OrphanQueryService' => '/path/Orphan.php'],
+        [],
+        ['entry_point_suffixes' => ['Controller']]
+    );
 
-        // BarQueryService has no callers → orphan
-        $this->assertContains('App\\Services\\BarQueryService', $result['orphans']);
+    $result = $tracer->trace('QueryService');
 
-        // SomeOtherService doesn't match suffix → not in trees or orphans
-        $this->assertArrayNotHasKey('App\\Services\\SomeOtherService', $result['trees']);
-        $this->assertNotContains('App\\Services\\SomeOtherService', $result['orphans']);
-    }
+    expect($result['orphans'])->toContain('App\\Services\\OrphanQueryService');
+    expect($result['trees'])->toBeEmpty();
+});
 
-    public function test_marks_orphans_when_no_callers(): void
-    {
-        $tracer = new DependencyTracer(
-            ['App\\Services\\OrphanQueryService' => '/path/Orphan.php'],
-            [],
-            ['entry_point_suffixes' => ['Controller']]
-        );
+test('detects cycles and does not loop', function (): void {
+    $classMap = [
+        'App\\Services\\FooQueryService' => '/path/Foo.php',
+        'App\\Services\\BarService' => '/path/Bar.php',
+    ];
 
-        $result = $tracer->trace('QueryService');
+    $reverseIndex = [
+        'App\\Services\\FooQueryService' => ['App\\Services\\BarService'],
+        'App\\Services\\BarService' => ['App\\Services\\FooQueryService'],
+    ];
 
-        $this->assertContains('App\\Services\\OrphanQueryService', $result['orphans']);
-        $this->assertEmpty($result['trees']);
-    }
+    $tracer = new DependencyTracer($classMap, $reverseIndex, [
+        'entry_point_suffixes' => ['Controller'],
+    ]);
 
-    public function test_detects_cycles_and_does_not_loop(): void
-    {
-        $classMap = [
-            'App\\Services\\FooQueryService' => '/path/Foo.php',
-            'App\\Services\\BarService' => '/path/Bar.php',
-        ];
+    $result = $tracer->trace('QueryService');
 
-        $reverseIndex = [
-            'App\\Services\\FooQueryService' => ['App\\Services\\BarService'],
-            'App\\Services\\BarService' => ['App\\Services\\FooQueryService'],
-        ];
+    expect($result['trees'])->toHaveKey('App\\Services\\FooQueryService');
 
-        $tracer = new DependencyTracer($classMap, $reverseIndex, [
-            'entry_point_suffixes' => ['Controller'],
-        ]);
+    $tree = $result['trees']['App\\Services\\FooQueryService'];
+    $barNode = $tree['callers']['App\\Services\\BarService'];
+    expect($barNode['callers'])->toHaveKey('App\\Services\\FooQueryService');
+    expect($barNode['callers']['App\\Services\\FooQueryService']['cycle'])->toBeTrue();
+});
 
-        // Must not throw or loop infinitely
-        $result = $tracer->trace('QueryService');
+test('excludes interfaces from roots', function (): void {
+    $tracer = new DependencyTracer($this->classMap, [], [
+        'entry_point_suffixes' => ['Controller'],
+        'interfaces' => ['App\\Contracts\\IFooQueryService' => true],
+    ]);
 
-        $this->assertArrayHasKey('App\\Services\\FooQueryService', $result['trees']);
+    $result = $tracer->trace('QueryService');
 
-        // The cycle should be detected in the callers tree
-        $tree = $result['trees']['App\\Services\\FooQueryService'];
-        $barNode = $tree['callers']['App\\Services\\BarService'];
-        $this->assertArrayHasKey('App\\Services\\FooQueryService', $barNode['callers']);
-        $this->assertTrue($barNode['callers']['App\\Services\\FooQueryService']['cycle']);
-    }
+    expect($result['orphans'])->not->toContain('App\\Contracts\\IFooQueryService');
+    expect($result['trees'])->not->toHaveKey('App\\Contracts\\IFooQueryService');
+});
 
-    public function test_excludes_interfaces_from_roots(): void
-    {
-        $tracer = new DependencyTracer($this->classMap, [], [
-            'entry_point_suffixes' => ['Controller'],
-            'interfaces' => ['App\\Contracts\\IFooQueryService' => true],
-        ]);
+test('excludes abstract classes from roots', function (): void {
+    $classMap = [
+        'App\\Services\\AbstractQueryService' => '/path/Abstract.php',
+        'App\\Services\\ConcreteQueryService' => '/path/Concrete.php',
+    ];
 
-        $result = $tracer->trace('QueryService');
+    $tracer = new DependencyTracer($classMap, [], [
+        'entry_point_suffixes' => ['Controller'],
+        'abstracts' => ['App\\Services\\AbstractQueryService' => true],
+    ]);
 
-        // Interface should NOT appear as root (not in orphans or trees)
-        $this->assertNotContains('App\\Contracts\\IFooQueryService', $result['orphans']);
-        $this->assertArrayNotHasKey('App\\Contracts\\IFooQueryService', $result['trees']);
-    }
+    $result = $tracer->trace('QueryService');
 
-    public function test_excludes_abstract_classes_from_roots(): void
-    {
-        $classMap = [
-            'App\\Services\\AbstractQueryService' => '/path/Abstract.php',
-            'App\\Services\\ConcreteQueryService' => '/path/Concrete.php',
-        ];
+    expect($result['orphans'])->not->toContain('App\\Services\\AbstractQueryService');
+    expect($result['orphans'])->toContain('App\\Services\\ConcreteQueryService');
+});
 
-        $tracer = new DependencyTracer($classMap, [], [
-            'entry_point_suffixes' => ['Controller'],
-            'abstracts' => ['App\\Services\\AbstractQueryService' => true],
-        ]);
+test('entry points stop recursion', function (): void {
+    $reverseIndex = [
+        'App\\Services\\FooQueryService' => ['App\\Http\\Controllers\\FooController'],
+        'App\\Http\\Controllers\\FooController' => ['App\\Services\\SomeMiddleware'],
+    ];
 
-        $result = $tracer->trace('QueryService');
+    $tracer = new DependencyTracer($this->classMap, $reverseIndex, [
+        'entry_point_suffixes' => ['Controller'],
+    ]);
 
-        $this->assertNotContains('App\\Services\\AbstractQueryService', $result['orphans']);
-        $this->assertContains('App\\Services\\ConcreteQueryService', $result['orphans']);
-    }
+    $result = $tracer->trace('QueryService');
 
-    public function test_entry_points_stop_recursion(): void
-    {
-        $reverseIndex = [
-            'App\\Services\\FooQueryService' => ['App\\Http\\Controllers\\FooController'],
-            // Controller has its own callers but tracing should stop at entry point
-            'App\\Http\\Controllers\\FooController' => ['App\\Services\\SomeMiddleware'],
-        ];
+    $tree = $result['trees']['App\\Services\\FooQueryService'];
+    $controllerNode = $tree['callers']['App\\Http\\Controllers\\FooController'];
 
-        $tracer = new DependencyTracer($this->classMap, $reverseIndex, [
-            'entry_point_suffixes' => ['Controller'],
-        ]);
+    expect($controllerNode['entry'])->toBeTrue();
+    expect($controllerNode)->not->toHaveKey('callers');
+});
 
-        $result = $tracer->trace('QueryService');
+test('returns empty when no matching classes', function (): void {
+    $tracer = new DependencyTracer($this->classMap, [], [
+        'entry_point_suffixes' => ['Controller'],
+    ]);
 
-        $tree = $result['trees']['App\\Services\\FooQueryService'];
-        $controllerNode = $tree['callers']['App\\Http\\Controllers\\FooController'];
+    $result = $tracer->trace('NonExistentSuffix');
 
-        // Controller node is marked as entry
-        $this->assertTrue($controllerNode['entry']);
-        // Recursion stopped — no 'callers' key inside the entry node
-        $this->assertArrayNotHasKey('callers', $controllerNode);
-    }
+    expect($result['trees'])->toBeEmpty();
+    expect($result['orphans'])->toBeEmpty();
+});
 
-    public function test_returns_empty_when_no_matching_classes(): void
-    {
-        $tracer = new DependencyTracer($this->classMap, [], [
-            'entry_point_suffixes' => ['Controller'],
-        ]);
+test('root filter can include only matching roots', function (): void {
+    $reverseIndex = [
+        'App\\Services\\FooQueryService' => ['App\\UseCases\\FooUseCase'],
+    ];
 
-        $result = $tracer->trace('NonExistentSuffix');
+    $tracer = new DependencyTracer($this->classMap, $reverseIndex, [
+        'entry_point_suffixes' => ['Controller'],
+        'root_filter' => fn (string $fqcn): bool => str_contains($fqcn, 'Foo'),
+    ]);
 
-        $this->assertEmpty($result['trees']);
-        $this->assertEmpty($result['orphans']);
-    }
-}
+    $result = $tracer->trace('QueryService');
+
+    expect($result['trees'])->toHaveKey('App\\Services\\FooQueryService');
+    expect($result['orphans'])->not->toContain('App\\Services\\BarQueryService');
+});
+
+test('root filter can exclude all roots', function (): void {
+    $tracer = new DependencyTracer($this->classMap, [], [
+        'entry_point_suffixes' => ['Controller'],
+        'root_filter' => fn (string $fqcn): bool => false,
+    ]);
+
+    $result = $tracer->trace('QueryService');
+
+    expect($result['trees'])->toBeEmpty();
+    expect($result['orphans'])->toBeEmpty();
+});

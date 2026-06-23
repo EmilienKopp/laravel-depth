@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EmilienKopp\LaravelDepth\Core;
 
 use EmilienKopp\LaravelDepth\Core\Visitors\ClassMapVisitor;
@@ -8,20 +10,20 @@ use PhpParser\ParserFactory;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
+use Throwable;
 
 /**
  * Scans configurable directories for PHP files and builds a class map
  * (FQCN => file path) using nikic/php-parser AST parsing.
  * Also tracks which FQCNs are interfaces and abstract classes.
  */
-class ClassMapBuilder
+final class ClassMapBuilder
 {
     public function __construct(
         private readonly string $basePath,
         private readonly array $scanDirectories,
         private readonly array $excludedPaths = [],
-    ) {
-    }
+    ) {}
 
     /**
      * Build the class map by scanning all configured directories.
@@ -33,7 +35,7 @@ class ClassMapBuilder
      *   abstracts: array<string, true>
      * }
      */
-    public function build(callable $progress = null): array
+    public function build(?callable $progress = null): array
     {
         $classMap = [];
         $interfaces = [];
@@ -42,7 +44,7 @@ class ClassMapBuilder
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
 
         foreach ($this->scanDirectories as $dir) {
-            $fullPath = rtrim($this->basePath, '/') . '/' . ltrim((string) $dir, '/');
+            $fullPath = mb_rtrim($this->basePath, '/').'/'.mb_ltrim((string) $dir, '/');
             if (! is_dir($fullPath)) {
                 continue;
             }
@@ -58,7 +60,11 @@ class ClassMapBuilder
                 }
 
                 $filePath = $file->getRealPath();
-                if ($filePath === false || $this->isExcluded($filePath)) {
+                if ($filePath === false) {
+                    continue;
+                }
+
+                if ($this->isExcluded($filePath)) {
                     continue;
                 }
 
@@ -85,19 +91,21 @@ class ClassMapBuilder
                     foreach ($visitor->getClassMap() as $fqcn => $path) {
                         $classMap[$fqcn] = $path;
                     }
-                    foreach ($visitor->getInterfaces() as $fqcn => $_) {
+
+                    foreach (array_keys($visitor->getInterfaces()) as $fqcn) {
                         $interfaces[$fqcn] = true;
                     }
-                    foreach ($visitor->getAbstracts() as $fqcn => $_) {
+
+                    foreach (array_keys($visitor->getAbstracts()) as $fqcn) {
                         $abstracts[$fqcn] = true;
                     }
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     // Skip files that cannot be parsed
                 }
             }
         }
 
-        return compact('classMap', 'interfaces', 'abstracts');
+        return ['classMap' => $classMap, 'interfaces' => $interfaces, 'abstracts' => $abstracts];
     }
 
     private function isExcluded(string $filePath): bool
@@ -106,8 +114,8 @@ class ClassMapBuilder
         foreach ($this->excludedPaths as $excluded) {
             $segment = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string) $excluded);
             if (
-                str_contains($normalized, DIRECTORY_SEPARATOR . $segment . DIRECTORY_SEPARATOR)
-                || str_ends_with($normalized, DIRECTORY_SEPARATOR . $segment)
+                str_contains($normalized, DIRECTORY_SEPARATOR.$segment.DIRECTORY_SEPARATOR)
+                || str_ends_with($normalized, DIRECTORY_SEPARATOR.$segment)
             ) {
                 return true;
             }

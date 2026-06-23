@@ -1,14 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EmilienKopp\LaravelDepth\Enrichers;
 
 use Illuminate\Support\Facades\Route;
+use Throwable;
 
 /**
  * Enriches entry-point Controller nodes with their fully resolved
  * HTTP method, route URI, and middleware stack using Laravel's Route collection.
  */
-class RouteEnricher
+final class RouteEnricher
 {
     /** @var array<string, array{method: string, route: string, middlewares: list<string>}>|null */
     private ?array $routeMap = null;
@@ -27,8 +30,10 @@ class RouteEnricher
         $this->routeMap = [];
 
         try {
-            $routes = Route::getRoutes();
-        } catch (\Throwable) {
+            $routeCollection = Route::getRoutes();
+            /** @var list<\Illuminate\Routing\Route> $routes */
+            $routes = array_values($routeCollection->getRoutes());
+        } catch (Throwable) {
             return $this->routeMap;
         }
 
@@ -46,10 +51,10 @@ class RouteEnricher
                     ? explode('@', $controller)[0]
                     : $controller;
 
-                $class = ltrim($class, '\\');
+                $class = mb_ltrim($class, '\\');
 
                 // Collect HTTP methods, omitting HEAD for cleaner output
-                $methods = array_filter($route->methods(), fn (string $m) => $m !== 'HEAD');
+                $methods = array_filter($route->methods(), fn (string $m): bool => $m !== 'HEAD');
                 $method = implode('|', array_values($methods));
 
                 $this->routeMap[$class] = [
@@ -57,7 +62,7 @@ class RouteEnricher
                     'route' => $route->uri(),
                     'middlewares' => $route->gatherMiddleware(),
                 ];
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // Skip problematic routes
             }
         }

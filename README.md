@@ -54,6 +54,18 @@ Write output to a file:
 php artisan depth:trace QueryService --output=storage/app/depth-queryservice.txt
 ```
 
+Filter roots by plain-text source match:
+
+```bash
+php artisan depth:trace QueryService --grep='@deprecated'
+```
+
+Filter roots by static symbol usage (traits, extends/implements, property types, method param types):
+
+```bash
+php artisan depth:trace QueryService --uses=Auditable --uses=SomeContract
+```
+
 The command exits with:
 
 - `0` on success
@@ -61,9 +73,11 @@ The command exits with:
 
 ## Command reference
 
-`depth:trace {suffix} {--json} {--output=}`
+`depth:trace {suffix} {--grep=} {--uses=*} {--json} {--output=}`
 
 - `suffix` (required): class-name suffix to trace, such as `Repository`, `Factory`, `QueryService`
+- `--grep=...`: keep only matching roots whose source file contains this exact string (plain text lookup)
+- `--uses=...`: keep only matching roots that use the given symbol(s). You can repeat the option or pass comma-separated values
 - `--json`: return machine-readable JSON instead of tree text
 - `--output=...`: write output to a file path instead of stdout (directories are created if needed)
 
@@ -152,16 +166,25 @@ Legend:
 
 ## How dependency detection works
 
-Laravel Depth is static analysis based. It currently indexes dependencies from constructor injection type hints and then builds a reverse graph:
+Laravel Depth is static analysis based. It indexes dependencies from constructor injection type hints and builds a reverse graph:
 
 `injected class => [callers]`
 
 It then starts from roots matching your suffix and recursively walks callers upward.
 
+When `--uses` is provided, it also builds a class usage index from AST analysis using:
+
+- traits used by the class
+- class extends/implements declarations
+- typed properties
+- class method parameter types
+
 ## Notes and limitations
 
 - Only concrete classes are considered roots (interfaces and abstract classes are excluded).
 - Dependency discovery is based on constructor signatures, not runtime container behavior.
+- `--grep` performs plain text matching on each root class file.
+- `--uses` matches symbols by full class name or trailing class segment (case-insensitive).
 - Route enrichment applies to controller entry points when Laravel routes can be resolved.
 - Files that cannot be parsed are skipped silently.
 
