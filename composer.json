@@ -39,15 +39,5 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true,
-    "config": {
-        "audit": {
-            "abandoned": "ignore"
-        }
-    },
-    "policy": {
-        "advisories": {
-            "block": false
-        }
-    }
+    "prefer-stable": true
 }

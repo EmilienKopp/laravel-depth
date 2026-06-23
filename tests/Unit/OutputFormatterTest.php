@@ -112,7 +112,7 @@ class OutputFormatterTest extends TestCase
 
         $decoded = json_decode($output, true);
         $this->assertIsArray($decoded);
-        $this->assertNull(json_last_error() === JSON_ERROR_NONE ? null : 'json error');
+        $this->assertSame(JSON_ERROR_NONE, json_last_error());
     }
 
     public function test_json_formatter_includes_entry_info(): void
