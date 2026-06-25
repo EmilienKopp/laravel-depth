@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace EmilienKopp\LaravelDepth\Core;
 
 use EmilienKopp\LaravelDepth\Core\Visitors\DependencyVisitor;
+use EmilienKopp\LaravelDepth\Support\Utils;
 use PhpParser\NodeTraverser;
 use PhpParser\ParserFactory;
 use Throwable;
@@ -53,11 +54,7 @@ final class DependencyIndexBuilder
                 $traverser->addVisitor($visitor);
                 $traverser->traverse($ast);
 
-                foreach ($visitor->getDependencies() as $callerFqcn => $injectedFqcns) {
-                    foreach ($injectedFqcns as $injectedFqcn) {
-                        $reverseIndex[$injectedFqcn][] = $callerFqcn;
-                    }
-                }
+                $reverseIndex = Utils::reverseIndex($visitor->getDependencies());
             } catch (Throwable) {
                 // Skip files that cannot be parsed
             }

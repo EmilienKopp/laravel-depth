@@ -13,8 +13,7 @@ use SplFileInfo;
 use Throwable;
 
 /**
- * Scans configurable directories for PHP files and builds a class map
- * (FQCN => file path) using nikic/php-parser AST parsing.
+ * Scans configurable directories for PHP files and builds a class map.
  * Also tracks which FQCNs are interfaces and abstract classes.
  */
 final class ClassMapBuilder
