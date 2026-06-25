@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace EmilienKopp\LaravelDepth\Core;
 
+use EmilienKopp\LaravelDepth\Core\Support\Utils;
 use EmilienKopp\LaravelDepth\Core\Visitors\DependencyVisitor;
-use EmilienKopp\LaravelDepth\Support\Utils;
 use PhpParser\NodeTraverser;
 use PhpParser\ParserFactory;
 use Throwable;

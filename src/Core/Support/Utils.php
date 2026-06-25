@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace EmilienKopp\LaravelDepth\Support;
+namespace EmilienKopp\LaravelDepth\Core\Support;
 
 final class Utils
 {
